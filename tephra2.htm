@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tephra Stratigraphy Chart</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            height: 100vh;
+        }
+
+        h1 {
+            color: #0073e6;
+            text-align: left;
+            width: 100%;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            width: 35%;
+            align-items: flex-start;
+        }
+
+        .small-button {
+            background-color: #0073e6;
+            color: white;
+            padding: 5px 10px;
+            margin-right: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .small-button:hover {
+            background-color: #005bb5;
+        }
+
+        #layersList {
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .layer-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        .delete-button {
+            background-color: transparent;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            color: red;
+        }
+
+        input[type="number"] {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .add-layer-controls, .paste-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        textarea {
+            width: 100%;
+            height: 60px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+
+        .add-button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .add-button:hover {
+            background-color: #218838;
+        }
+
+        #chartContainer {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            width: 60%;
+            height: 100%;
+        }
+
+        .chart-wrapper {
+            width: 50%; /* Initial width, adjustable with slider */
+            transition: width 0.3s ease;
+        }
+
+        .slider-container {
+            margin-top: 10px;
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tephra Stratigraphy Chart</h1>
+
+        <div class="slider-container">
+            <label for="chartWidth">Chart Width:</label>
+            <input type="range" id="chartWidth" min="20" max="100" value="50" oninput="adjustChartWidth(this.value)">
+        </div>
+
+        <div style="display: flex; gap: 5px; margin-bottom: 10px;">
+            <button class="small-button" onclick="saveAsSVG()">Save as SVG</button>
+            <button class="small-button" onclick="saveAsPNG()">Save as PNG</button>
+        </div>
+
+        <div id="layersList"></div>
+
+        <div class="add-layer-controls">
+            <label id="nextLabel" for="thickness">Label 7:</label>
+            <input type="number" id="thickness" name="thickness" min="1" required>
+            <button type="button" class="add-button" onclick="addLayer()">Add Layer</button>
+        </div>
+
+        <div class="paste-controls">
+            <textarea id="csvInput" placeholder="Paste comma-separated values..."></textarea>
+            <button type="button" class="add-button" onclick="appendFromCSV()">Add from CSV</button>
+        </div>
+    </div>
+
+    <div id="chartContainer">
+        <div class="chart-wrapper">
+            <svg id="chart" xmlns="http://www.w3.org/2000/svg"></svg>
+        </div>
+    </div>
+
+    <script>
+        let layers = [];
+
+        window.onload = function () {
+            const initialLayers = [52, 20, 44, 11, 37, 24];
+            initialLayers.forEach((thickness, index) => {
+                layers.push({ id: index + 1, thickness: thickness });
+            });
+            updateLayersList();
+            updateChart();
+            updateNextLabel();
+        };
+
+        function addLayer() {
+            const thickness = document.getElementById('thickness').value;
+            if (!thickness) return;
+            const layer = { id: layers.length + 1, thickness: parseInt(thickness) };
+            layers.push(layer);
+            updateLayersList();
+            updateChart();
+            updateNextLabel();
+        }
+
+        function appendFromCSV() {
+            const csvInput = document.getElementById('csvInput').value.trim();
+            if (!csvInput) return;
+
+            const values = csvInput.split(',').map(v => parseInt(v.trim())).filter(v => !isNaN(v));
+            values.forEach(value => {
+                layers.push({ id: layers.length + 1, thickness: value });
+            });
+
+            document.getElementById('csvInput').value = ''; // Clear input field
+            updateLayersList();
+            updateChart();
+            updateNextLabel();
+        }
+
+        function updateNextLabel() {
+            const nextLabel = document.getElementById('nextLabel');
+            nextLabel.textContent = `Label ${layers.length + 1}:`;
+        }
+
+        function updateLayersList() {
+            const layersList = document.getElementById('layersList');
+            layersList.innerHTML = '';
+
+            layers.forEach(layer => {
+                const layerElement = document.createElement('div');
+                layerElement.classList.add('layer-item');
+                layerElement.innerHTML = `
+                    <span>Layer ${layer.id}:</span>
+                    <input type="number" value="${layer.thickness}" oninput="resizeLayer(${layer.id}, this.value)">
+                    <button class="delete-button" tabindex="-1" onclick="deleteLayer(${layer.id})">x</button>
+                `;
+                layersList.appendChild(layerElement);
+            });
+        }
+
+        function resizeLayer(id, thickness) {
+            const layer = layers.find(l => l.id === id);
+            layer.thickness = thickness;
+            updateChart();
+        }
+
+        function deleteLayer(id) {
+            layers = layers.filter(l => l.id !== id);
+            updateLayersList();
+            updateChart();
+            updateNextLabel();
+        }
+
+        function updateChart() {
+            const svg = document.getElementById('chart');
+            svg.innerHTML = '';
+
+            let totalHeight = layers.reduce((acc, layer) => acc + layer.thickness, 0);
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('height', `${totalHeight}px`);
+
+            let currentY = 0;
+            layers.forEach((layer, index) => {
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', '0');
+                rect.setAttribute('y', `${currentY}px`);
+                rect.setAttribute('width', '100%');
+                rect.setAttribute('height', `${layer.thickness}px`);
+                rect.setAttribute('fill', index % 2 === 0 ? 'white' : 'black');
+                rect.setAttribute('stroke', 'black');
+                svg.appendChild(rect);
+                currentY += layer.thickness;
+            });
+        }
+
+        function adjustChartWidth(value) {
+            const chartWrapper = document.querySelector('.chart-wrapper');
+            chartWrapper.style.width = `${value}%`;
+        }
+
+        function saveAsSVG() {
+            const svg = document.getElementById('chart');
+            const serializer = new XMLSerializer();
+            const source = serializer.serializeToString(svg);
+            const svgBlob = new Blob([source], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tephra_stratigraphy_chart.svg';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function saveAsPNG() {
+            const svg = document.getElementById('chart');
+            const svgData = new XMLSerializer().serializeToString(svg);
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+
+            img.onload = function () {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                const pngFile = canvas.toDataURL('image/png');
+                const a = document.createElement('a');
+                a.href = pngFile;
+                a.download = 'tephra_stratigraphy_chart.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            img.src = url;
+        }
+    </script>
+</body>
+</html>
